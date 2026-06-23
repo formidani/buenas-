@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simulación de Producción 3D - Tiendas Independientes</title>
+  <style>
+    /* --- ESTILOS CSS --- */
+    body {
+      margin: 0;
+      overflow: hidden;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background-color: #111416;
+    }
+
+    #canvas-container {
+      width: 100vw;
+      height: 100vh;
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 1;
+    }
+
+    .interface {
+      position: absolute;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 10;
+      text-align: center;
+      background: rgba(15, 15, 15, 0.9);
+      padding: 15px 30px;
+      border-radius: 16px;
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 15px 35px rgba(0,0,0,0.7);
+      width: 85%;
+      max-width: 500px;
+    }
+
+    h1 {
+      margin: 0 0 5px 0;
+      font-size: 1.25rem;
+      color: #ff4757;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    p {
+      margin: 0 0 15px 0;
+      font-size: 0.9rem;
+      color: #ccc;
+      line-height: 1.4;
+    }
+
+    .controls {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .controls button {
+      background: #2f3542;
+      border: 1px solid rgba(255,255,255,0.1);
+      color: white;
+      padding: 10px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: bold;
+      font-size: 0.85rem;
+      transition: all 0.3s ease;
+      flex: 1;
+    }
+
+    .controls button.active {
+      background: #ff4757;
+      border-color: #ff4757;
+      box-shadow: 0 0 10px rgba(255, 71, 87, 0.4);
+    }
+
+    .controls button:hover {
+      background: #ff6b81;
+      color: white;
+    }
+    
+    .hint {
+      font-size: 0.75rem;
+      color: #747d8c;
+      margin-top: 8px;
+    }
+  </style>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+
+  <div id="canvas-container"></div>
+
+  <div class="interface">
+    <h1 id="step-title">1. EN LA COCINA</h1>
+    <p id="step-desc">El equipo de chefs trabaja preparando y decorando en el lado izquierdo, dejando libre la vista hacia el horno derecho donde se cocina un hot cake.</p>
+    <div class="controls">
+      <button id="btn-0" class="active" onclick="selectActivity(0)">1. Cocina</button>
+      <button id="btn-1" onclick="selectActivity(1)">2. Empaque</button>
+      <button id="btn-2" onclick="selectActivity(2)">3. Venta</button>
+    </div>
+    <div class="hint">🔄 Arrastra para girar 360° | Usa los botones para cambiar de tiendita</div>
+  </div>
+
+  <script>
+    // --- MOTOR PRINCIPAL THREE.JS ---
+    const container = document.getElementById('canvas-container');
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x111416); 
+
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    container.appendChild(renderer.domElement);
+
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.maxPolarAngle = Math.PI / 2 - 0.05;
+
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    scene.add(ambientLight);
+
+    const dirLight = new THREE.DirectionalLight(0xfff1e0, 0.8); 
+    dirLight.position.set(10, 25, 15);
+    scene.add(dirLight);
+
+    // --- MATERIALES ---
+    const matChef = new THREE.MeshLambertMaterial({ color: 0xffffff });
+    const matSkin = new THREE.MeshLambertMaterial({ color: 0xffdbac });
+    const matTable = new THREE.MeshLambertMaterial({ color: 0x8b5a2b }); 
+    const matApron = new THREE.MeshLambertMaterial({ color: 0xd63031 }); 
+    const matCap = new THREE.MeshLambertMaterial({ color: 0x2e86de });   
+    const matBox = new THREE.MeshLambertMaterial({ color: 0xeccc68 });   
+    const matFace = new THREE.MeshBasicMaterial({ color: 0x2c3e50 });   
+    const matMoney = new THREE.MeshStandardMaterial({ color: 0x1dd1a1 });
+    const matOven = new THREE.MeshLambertMaterial({ color: 0xbdc3c7 });
+    const matDough = new THREE.MeshLambertMaterial({ color: 0xf5f6fa });
+    const matTomato = new THREE.MeshLambertMaterial({ color: 0xff4757 });
+    const matCherry = new THREE.MeshLambertMaterial({ color: 0xff0000 });
+    
+    const matWall = new THREE.MeshLambertMaterial({ color: 0x2c3e50 });
+    const matFloor = new THREE.MeshLambertMaterial({ color: 0x34495e });
+    const matRoof = new THREE.MeshLambertMaterial({ color: 0xff4757 }); 
+    const matPole = new THREE.MeshLambertMaterial({ color: 0xbdc3c7 });
+
+    function construirTiendita() {
+      const tienda = new THREE.Group();
+
+      const suelo = new THREE.Mesh(new THREE.BoxGeometry(7.5, 0.1, 5), matFloor);
+      suelo.position.y = -0.05;
+      tienda.add(suelo);
+
+      const pared = new THREE.Mesh(new THREE.BoxGeometry(7.5, 4, 0.2), matWall);
+      pared.position.set(0, 2, -2.4);
+      tienda.add(pared);
+
+      const posicionesPostes = [
+        [-3.6, 2.4], [3.6, 2.4], [-3.6, -2.4], [3.6, -2.4]
+      ];
+      posicionesPostes.forEach(pos => {
+        const poste = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 4), matPole);
+        poste.position.set(pos[0], 2, pos[1]);
+        tienda.add(poste);
+      });
+
+      const techo = new THREE.Mesh(new THREE.BoxGeometry(7.9, 0.4, 5.4), matRoof);
+      techo.position.y = 4.1;
+      tienda.add(techo);
+
+      return tienda;
+    }
+
+    function crearHumano(tipo) {
+      const personaje = new THREE.Group();
+
+      let colorTorso = 0x341f97; 
+      if (tipo === 'chef') colorTorso = 0xffffff;
+      if (tipo === 'cliente') colorTorso = 0x10ac84; 
+
+      const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.45, 1.4), new THREE.MeshLambertMaterial({color: colorTorso}));
+      torso.position.y = 1.6;
+      personaje.add(torso);
+
+      if (tipo === 'chef' || tipo === 'empaque') {
+        const delantal = new THREE.Mesh(new THREE.CylinderGeometry(0.37, 0.47, 1.0, 16, 1, false, 0, Math.PI), matApron);
+        delantal.position.set(0, 1.5, 0.02);
+        personaje.add(delantal);
+      }
+
+      const cabeza = new THREE.Mesh(new THREE.SphereGeometry(0.4, 16, 16), matSkin);
+      cabeza.position.y = 2.6;
+      personaje.add(cabeza);
+
+      const ojosGroup = new THREE.Group();
+      const ojoIzq = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 8), matFace);
+      ojoIzq.position.set(-0.12, 0.1, 0.35);
+      const ojoDer = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 8), matFace);
+      ojoDer.position.set(0.12, 0.1, 0.35);
+      ojosGroup.position.y = 2.6;
+      ojosGroup.add(ojoIzq, ojoDer);
+      personaje.add(ojosGroup);
+
+      if (tipo === 'chef') {
+        const gorroBase = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 0.25), matChef);
+        gorroBase.position.y = 3.0;
+        const gorroTop = new THREE.Mesh(new THREE.SphereGeometry(0.48, 16, 16), matChef);
+        gorroTop.position.y = 3.25;
+        personaje.add(gorroBase, gorroTop);
+      } else if (tipo === 'repartidor') {
+        const gorga = new THREE.Mesh(new THREE.CylinderGeometry(0.41, 0.41, 0.15), matCap);
+        gorga.position.y = 2.95;
+        const visera = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.04, 0.25), matCap);
+        visera.position.set(0, 2.9, 0.35);
+        personaje.add(gorga, visera);
+      }
+
+      const armGeo = new THREE.CylinderGeometry(0.1, 0.1, 0.7);
+      armGeo.translate(0, -0.35, 0); 
+
+      const brazoIzq = new THREE.Mesh(armGeo, matSkin);
+      brazoIzq.position.set(-0.5, 2.2, 0);
+      
+      const brazoDer = new THREE.Mesh(armGeo, matSkin);
+      brazoDer.position.set(0.5, 2.2, 0);
+
+      personaje.add(brazoIzq, brazoDer);
+      personaje.userData = { brazoIzq, brazoDer, torso, ojosGroup };
+      return personaje;
+    }
+
+    function crearHorno(encendido = false) {
+      const horno = new THREE.Group();
+      const cuerpo = new THREE.Mesh(new THREE.BoxGeometry(1.5, 2.5, 1.2), matOven);
+      cuerpo.position.y = 1.25;
+      horno.add(cuerpo);
+      
+      const puerta = new THREE.Mesh(new THREE.BoxGeometry(1.3, 1.0, 0.1), new THREE.MeshLambertMaterial({color: 0x2c3e50}));
+      puerta.position.set(0, 1.5, 0.6);
+      horno.add(puerta);
+      
+      let cristalMat;
+
+      if (encendido) {
+        const fondoFuego = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.8, 0.1), new THREE.MeshBasicMaterial({color: 0xff2200}));
+        fondoFuego.position.set(0, 1.5, -0.4);
+        horno.add(fondoFuego);
+
+        const luzHorno = new THREE.PointLight(0xff5500, 6, 6);
+        luzHorno.position.set(0, 1.5, 0.2);
+        horno.add(luzHorno);
+
+        const hotcakeGroup = new THREE.Group();
+        const matHotcake = new THREE.MeshBasicMaterial({color: 0x26140a}); 
+        const matMantequilla = new THREE.MeshBasicMaterial({color: 0xffd700}); 
+        
+        const baseHotcake = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 0.1, 16), matHotcake);
+        baseHotcake.position.set(0, 1.3, 0.1);
+        
+        const mantequilla = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.06, 0.1), matMantequilla);
+        mantequilla.position.set(0.05, 1.36, 0.1);
+
+        hotcakeGroup.add(baseHotcake, mantequilla);
+        horno.add(hotcakeGroup);
+
+        cristalMat = new THREE.MeshBasicMaterial({color: 0xffaa00, transparent: true, opacity: 0.45});
+      } else {
+        cristalMat = new THREE.MeshBasicMaterial({color: 0xf6e58d, transparent: true, opacity: 0.7});
+      }
+
+      const cristal = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.7, 0.11), cristalMat);
+      cristal.position.set(0, 1.5, 0.62);
+      horno.add(cristal);
+      
+      const asa = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1), matOven);
+      asa.rotation.z = Math.PI / 2;
+      asa.position.set(0, 1.5, 0.7);
+      horno.add(asa);
+      
+      return horno;
+    }
+
+    // --- INSTANCIACIÓN DE LAS TIENDAS ---
+    
+    // 1. TIENDA COCINA
+    const tiendaCocina = construirTiendita();
+    const mesa1 = new THREE.Mesh(new THREE.BoxGeometry(7.0, 1.6, 1.8), matTable);
+    mesa1.position.set(0, 0.8, 0);
+    
+    const chef1 = crearHumano('chef');
+    chef1.position.set(-2.4, 0, -0.7);
+    const masa = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.1), matDough);
+    masa.position.set(-2.4, 1.65, 0.1);
+
+    const chef2 = crearHumano('chef');
+    chef2.position.set(-0.8, 0, -0.7);
+    const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.2, 0.3), matOven);
+    bowl.position.set(-0.8, 1.75, 0.1);
+    const tomate = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), matTomato);
+    tomate.position.set(-0.8, 1.9, 0.1);
+
+    const chef4 = crearHumano('chef');
+    chef4.position.set(0.8, 0, -0.7);
+    const productoDecorar = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 0.2), matBox);
+    productoDecorar.position.set(0.8, 1.7, 0.1);
+    const cereza = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), matCherry);
+    cereza.position.set(0.8, 1.85, 0.1);
+
+    const hornoNormal = crearHorno(false);
+    hornoNormal.position.set(-2.4, 0, -2.8);
+
+    const hornoEncendido = crearHorno(true);
+    hornoEncendido.position.set(2.4, 0, -2.8); 
+
+    tiendaCocina.add(mesa1, chef1, chef2, chef4, hornoEncendido, hornoNormal, masa, bowl, tomate, productoDecorar, cereza);
+    scene.add(tiendaCocina);
+
+    // 2. TIENDA EMPAQUE
+    const tiendaEmpaque = construirTiendita();
+    const mesa2 = new THREE.Mesh(new THREE.BoxGeometry(3.5, 1.6, 1.8), matTable);
+    mesa2.position.set(0, 0.8, 0);
+    const caja = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.7, 0.9), matBox);
+    caja.position.set(0, 1.8, 0.1);
+    const operario = crearHumano('empaque');
+    operario.position.set(0, 0, -0.7);
+    tiendaEmpaque.add(mesa2, caja, operario);
+    scene.add(tiendaEmpaque);
+
+    // 3. TIENDA VENTA (MÓDULO MODIFICADO CON CAJA REGISTRADORA)
+    const tiendaVenta = construirTiendita();
+    const mesa3 = new THREE.Mesh(new THREE.BoxGeometry(3.5, 1.6, 1.8), matTable);
+    mesa3.position.set(0, 0.8, 0);
+    
+    const repartidor = crearHumano('repartidor');
+    repartidor.position.set(-0.6, 0, -0.7); // Desplazado un poco a la izquierda para dejar espacio a la caja
+    
+    const cliente = crearHumano('cliente');
+    cliente.position.set(0, 0, 1.1);
+    cliente.rotation.y = Math.PI;
+
+    // --- DISEÑO DE LA CAJA REGISTRADORA ---
+    const cajaRegistradora = new THREE.Group();
+    const baseCaja = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.3, 0.5), new THREE.MeshLambertMaterial({color: 0x57606f}));
+    baseCaja.position.y = 1.75;
+    
+    const pantallaCaja = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.2, 0.08), new THREE.MeshLambertMaterial({color: 0x2f3542}));
+    pantallaCaja.position.set(0, 1.95, -0.1);
+    
+    const tecladoCaja = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.05, 0.2), new THREE.MeshBasicMaterial({color: 0xdcdde1}));
+    tecladoCaja.position.set(0, 1.88, 0.1);
+    tecladoCaja.rotation.x = Math.PI / 8; // Inclinación realista
+    
+    cajaRegistradora.add(baseCaja, pantallaCaja, tecladoCaja);
+    cajaRegistradora.position.set(0.5, 0, -0.2); // Al lado del vendedor
+    // ----------------------------------------
+
+    const cajaEntrega = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.5, 0.7), matBox);
+    cajaEntrega.position.set(-0.2, 1.65, 0);
+
+    const dinero = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.02, 0.18), matMoney);
+    dinero.position.set(0.3, 1.62, 0.5);
+
+    tiendaVenta.add(mesa3, repartidor, cliente, cajaEntrega, dinero, cajaRegistradora);
+    scene.add(tiendaVenta);
+
+    const modulos = [tiendaCocina, tiendaEmpaque, tiendaVenta];
+
+    // --- CONTROL DE ACTIVIDADES ---
+    let actividadActual = 0;
+    
+    camera.position.set(1.5, 4.2, 8.2);
+    controls.target.set(0.5, 1.7, 0);
+
+    const infoPasos = [
+      { title: "1. EN LA COCINA", desc: "El equipo trabaja en el lado izquierdo de la mesa, dejando una vista clara hacia el horno derecho donde se hornea el hot cake." },
+      { title: "2. EMPAQUETANDO", desc: "El operario recibe el producto acabado y ejecuta el proceso de sellado en caja." },
+      { title: "3. COMPRA Y VENTA", desc: "¡Intercambio final! El cliente paga deslizando el dinero en efectivo, mientras el repartidor despacha la caja desde la registradora." }
+    ];
+
+    window.selectActivity = function(paso) {
+      actividadActual = paso;
+      
+      for (let i = 0; i < 3; i++) {
+        document.getElementById(`btn-${i}`).classList.remove('active');
+      }
+      document.getElementById(`btn-${paso}`).classList.add('active');
+      
+      document.getElementById('step-title').innerText = infoPasos[paso].title;
+      document.getElementById('step-desc').innerText = infoPasos[paso].desc;
+      
+      if (paso === 0) {
+        camera.position.set(1.5, 4.2, 8.2);
+        controls.target.set(0.5, 1.7, 0);
+      } else {
+        camera.position.set(0, 4.5, 8.5);
+        controls.target.set(0, 1.8, 0);
+      }
+    }
+
+    const clock = new THREE.Clock();
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const time = clock.getElapsedTime();
+
+      for (let i = 0; i < modulos.length; i++) {
+        modulos[i].visible = (i === actividadActual);
+      }
+
+      // --- ANIMACIONES ---
+      if (actividadActual === 0) {
+        chef1.userData.brazoIzq.rotation.x = -Math.PI / 2.5 + Math.sin(time * 6) * 0.2;
+        chef1.userData.brazoDer.rotation.x = -Math.PI / 2.5 + Math.cos(time * 6) * 0.2;
+        masa.scale.y = 1 + Math.abs(Math.sin(time * 6)) * 0.2;
+        masa.scale.x = 1 - Math.abs(Math.sin(time * 6)) * 0.1;
+
+        chef2.userData.brazoDer.rotation.x = -Math.PI / 3 + Math.sin(time * 4) * 0.3;
+        chef2.userData.brazoIzq.rotation.x = -Math.PI / 3 + Math.cos(time * 4) * 0.1;
+        tomate.position.y = 1.9 + Math.abs(Math.cos(time * 4)) * 0.1;
+
+        chef4.userData.brazoIzq.rotation.x = -Math.PI / 2 + Math.sin(time * 5) * 0.15;
+        chef4.userData.brazoDer.rotation.x = -Math.PI / 2 + Math.cos(time * 5) * 0.15;
+        cereza.position.y = 1.85 + Math.abs(Math.sin(time * 5)) * 0.05;
+      }
+      else if (actividadActual === 1) {
+        operario.userData.brazoIzq.rotation.x = -Math.PI/4 + Math.sin(time * 4) * 0.4;
+        operario.userData.brazoDer.rotation.x = -Math.PI/4 + Math.sin(time * 4) * 0.4;
+        caja.position.y = 1.75 + Math.abs(Math.sin(time * 4)) * 0.15; 
+      }
+      else if (actividadActual === 2) {
+        // Brazos estirados listos para la acción
+        repartidor.userData.brazoDer.rotation.x = -Math.PI / 2;
+        repartidor.userData.brazoIzq.rotation.x = -Math.PI / 2.5;
+        
+        cliente.userData.brazoDer.rotation.x = -Math.PI / 2; 
+        cliente.userData.brazoIzq.rotation.x = -Math.PI / 2.3;
+
+        // ANIMACIÓN DE INTERCAMBIO FLUIDO (Ciclo continuo)
+        let cicloIntercambio = (time * 1.8) % 3; 
+
+        if (cicloIntercambio < 1.5) {
+          // Fase 1: El dinero avanza del Cliente al Vendedor
+          let progreso = cicloIntercambio / 1.5;
+          dinero.position.z = 0.9 - (progreso * 1.2);
+          dinero.position.x = 0.3 - (progreso * 0.2);
+          dinero.visible = true;
+
+          // La caja espera en el mostrador
+          cajaEntrega.position.z = -0.1;
+          cajaEntrega.position.x = -0.2;
+        } else {
+          // Fase 2: El dinero ya se guardó y la caja avanza del Vendedor al Cliente
+          let progreso = (cicloIntercambio - 1.5) / 1.5;
+          dinero.visible = false;
+
+          cajaEntrega.position.z = -0.1 + (progreso * 1.1);
+          cajaEntrega.position.x = -0.2 + (progreso * 0.2);
+        }
+      }
+
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    animate();
+  </script>
+</body>
+</html>
